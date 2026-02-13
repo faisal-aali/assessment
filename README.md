@@ -2,7 +2,7 @@
 
 A visual drag-and-drop funnel builder for creating upsell funnels. Built with React, TypeScript, React Flow, and Tailwind CSS.
 
-**[Live Demo →](https://funnel-builder.vercel.app)** _(update with actual URL after deploy)_
+**[Live Demo →](https://assessment-psi-liart.vercel.app/)**
 
 ## Quick Start
 
