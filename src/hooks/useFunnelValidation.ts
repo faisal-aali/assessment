@@ -12,7 +12,7 @@ export function useFunnelValidation(nodes: Node[], edges: Edge[]) {
     const result: ValidationWarning[] = []
 
     for (const node of nodes) {
-      const data = node.data as FunnelNodeData
+      const data = node.data as unknown as FunnelNodeData
       const outgoing = edges.filter((e) => e.source === node.id)
       const incoming = edges.filter((e) => e.target === node.id)
 

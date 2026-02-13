@@ -6,7 +6,6 @@ import {
 } from '@xyflow/react'
 
 export default function CustomEdge({
-  id,
   sourceX,
   sourceY,
   targetX,

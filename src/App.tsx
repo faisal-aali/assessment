@@ -10,6 +10,7 @@ import {
   BackgroundVariant,
   MarkerType,
   type Connection,
+  type Edge,
   type Node,
   type NodeChange,
   type EdgeChange,
@@ -34,25 +35,32 @@ import { v4 as uuid } from 'uuid'
 const nodeTypes = { funnel: FunnelNode }
 const edgeTypes = { custom: CustomEdge }
 
+function getNodeData(node: Node): FunnelNodeData {
+  return node.data as unknown as FunnelNodeData
+}
+
 function generateLabel(category: NodeCategory, existingNodes: Node[]) {
   const base = NODE_TEMPLATES[category].label
   if (category === 'sales' || category === 'order' || category === 'thankyou') {
     const count = existingNodes.filter(
-      (n) => (n.data as FunnelNodeData).category === category
+      (n) => getNodeData(n).category === category
     ).length
     return count === 0 ? base : `${base} ${count + 1}`
   }
   const count = existingNodes.filter(
-    (n) => (n.data as FunnelNodeData).category === category
+    (n) => getNodeData(n).category === category
   ).length
   return `${base} ${count + 1}`
 }
 
+const initialNodes: Node[] = []
+const initialEdges: Edge[] = []
+
 function FlowCanvas() {
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const { screenToFlowPosition } = useReactFlow()
-  const [nodes, setNodes, onNodesChange] = useNodesState([])
-  const [edges, setEdges, onEdgesChange] = useEdgesState([])
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
 
   const { warnings, warningNodeIds } = useFunnelValidation(nodes, edges)
   const { save, load, exportJSON, importJSON } = usePersistence()
@@ -62,8 +70,8 @@ function FlowCanvas() {
   useEffect(() => {
     const saved = load()
     if (saved) {
-      setNodes(saved.nodes)
-      setEdges(saved.edges)
+      setNodes(saved.nodes as Node[])
+      setEdges(saved.edges as Edge[])
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -83,9 +91,9 @@ function FlowCanvas() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
         e.preventDefault()
         if (e.shiftKey) {
-          redo(nodes, edges, setNodes, setEdges)
+          redo(nodes, edges, (n) => setNodes(n as Node[]), (e) => setEdges(e as Edge[]))
         } else {
-          undo(nodes, edges, setNodes, setEdges)
+          undo(nodes, edges, (n) => setNodes(n as Node[]), (e) => setEdges(e as Edge[]))
         }
       }
     }
@@ -93,9 +101,8 @@ function FlowCanvas() {
     return () => window.removeEventListener('keydown', handler)
   }, [nodes, edges, setNodes, setEdges, undo, redo])
 
-  // wrap node/edge changes to capture snapshots for undo
   const handleNodesChange = useCallback(
-    (changes: NodeChange[]) => {
+    (changes: NodeChange<Node>[]) => {
       const hasStructuralChange = changes.some(
         (c) => c.type === 'remove' || c.type === 'add'
       )
@@ -108,7 +115,7 @@ function FlowCanvas() {
   )
 
   const handleEdgesChange = useCallback(
-    (changes: EdgeChange[]) => {
+    (changes: EdgeChange<Edge>[]) => {
       const hasStructuralChange = changes.some(
         (c) => c.type === 'remove' || c.type === 'add'
       )
@@ -143,13 +150,13 @@ function FlowCanvas() {
   )
 
   const isValidConnection = useCallback(
-    (connection: Connection) => {
+    (connection: Edge | Connection) => {
       if (connection.source === connection.target) return false
 
       const sourceNode = nodes.find((n) => n.id === connection.source)
       if (!sourceNode) return false
 
-      const sourceData = sourceNode.data as FunnelNodeData
+      const sourceData = getNodeData(sourceNode)
       if (sourceData.category === 'thankyou') return false
 
       return true
@@ -186,7 +193,7 @@ function FlowCanvas() {
         } satisfies FunnelNodeData,
       }
 
-      setNodes((nds) => nds.concat(newNode))
+      setNodes((nds) => [...nds, newNode])
     },
     [screenToFlowPosition, nodes, edges, setNodes, takeSnapshot]
   )
@@ -199,8 +206,8 @@ function FlowCanvas() {
     const state = await importJSON()
     if (state) {
       takeSnapshot(nodes, edges)
-      setNodes(state.nodes)
-      setEdges(state.edges)
+      setNodes(state.nodes as Node[])
+      setEdges(state.edges as Edge[])
     }
   }, [importJSON, setNodes, setEdges, nodes, edges, takeSnapshot])
 
@@ -232,13 +239,13 @@ function FlowCanvas() {
           buttonLabel: NODE_TEMPLATES[category].buttonLabel,
         } satisfies FunnelNodeData,
       }
-      setNodes((nds) => nds.concat(newNode))
+      setNodes((nds) => [...nds, newNode])
     },
     [nodes, edges, setNodes, takeSnapshot]
   )
 
   const minimapNodeColor = useCallback((node: Node) => {
-    const data = node.data as FunnelNodeData
+    const data = getNodeData(node)
     return NODE_TEMPLATES[data.category]?.color ?? '#94a3b8'
   }, [])
 
