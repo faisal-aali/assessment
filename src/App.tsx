@@ -5,11 +5,14 @@ import {
   useNodesState,
   useEdgesState,
   Controls,
+  MiniMap,
   Background,
   BackgroundVariant,
   MarkerType,
   type Connection,
   type Node,
+  type NodeChange,
+  type EdgeChange,
   ReactFlowProvider,
   useReactFlow,
 } from '@xyflow/react'
@@ -22,6 +25,7 @@ import Toolbar from './components/Toolbar'
 import ValidationPanel from './components/ValidationPanel'
 import { useFunnelValidation } from './hooks/useFunnelValidation'
 import { usePersistence } from './hooks/usePersistence'
+import { useUndoRedo } from './hooks/useUndoRedo'
 import { NODE_TEMPLATES, type NodeCategory, type FunnelNodeData } from './types/funnel'
 import { v4 as uuid } from 'uuid'
 
@@ -50,6 +54,7 @@ function FlowCanvas() {
 
   const { warnings, warningNodeIds } = useFunnelValidation(nodes, edges)
   const { save, load, exportJSON, importJSON } = usePersistence()
+  const { takeSnapshot, undo, redo } = useUndoRedo()
 
   // load saved state on mount
   useEffect(() => {
@@ -60,7 +65,7 @@ function FlowCanvas() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // auto-save on changes (debounced slightly)
+  // auto-save on changes
   useEffect(() => {
     const timer = setTimeout(() => {
       if (nodes.length > 0 || edges.length > 0) {
@@ -70,7 +75,7 @@ function FlowCanvas() {
     return () => clearTimeout(timer)
   }, [nodes, edges, save])
 
-  // update node data with warning flags
+  // update warning flags on nodes
   useEffect(() => {
     setNodes((nds) =>
       nds.map((node) => ({
@@ -83,6 +88,49 @@ function FlowCanvas() {
     )
   }, [warningNodeIds, setNodes])
 
+  // keyboard shortcuts for undo/redo
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) {
+          redo(nodes, edges, setNodes, setEdges)
+        } else {
+          undo(nodes, edges, setNodes, setEdges)
+        }
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [nodes, edges, setNodes, setEdges, undo, redo])
+
+  // wrap node/edge changes to capture snapshots for undo
+  const handleNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      const hasStructuralChange = changes.some(
+        (c) => c.type === 'remove' || c.type === 'add'
+      )
+      if (hasStructuralChange) {
+        takeSnapshot(nodes, edges)
+      }
+      onNodesChange(changes)
+    },
+    [onNodesChange, takeSnapshot, nodes, edges]
+  )
+
+  const handleEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
+      const hasStructuralChange = changes.some(
+        (c) => c.type === 'remove' || c.type === 'add'
+      )
+      if (hasStructuralChange) {
+        takeSnapshot(nodes, edges)
+      }
+      onEdgesChange(changes)
+    },
+    [onEdgesChange, takeSnapshot, nodes, edges]
+  )
+
   const onConnect = useCallback(
     (params: Connection) => {
       const exists = edges.some(
@@ -90,6 +138,7 @@ function FlowCanvas() {
       )
       if (exists) return
 
+      takeSnapshot(nodes, edges)
       setEdges((eds) =>
         addEdge(
           {
@@ -101,7 +150,7 @@ function FlowCanvas() {
         )
       )
     },
-    [setEdges, edges]
+    [setEdges, edges, nodes, takeSnapshot]
   )
 
   const isValidConnection = useCallback(
@@ -135,6 +184,8 @@ function FlowCanvas() {
         y: e.clientY,
       })
 
+      takeSnapshot(nodes, edges)
+
       const newNode: Node = {
         id: uuid(),
         type: 'funnel',
@@ -148,7 +199,7 @@ function FlowCanvas() {
 
       setNodes((nds) => nds.concat(newNode))
     },
-    [screenToFlowPosition, nodes, setNodes]
+    [screenToFlowPosition, nodes, edges, setNodes, takeSnapshot]
   )
 
   const handleExport = useCallback(() => {
@@ -158,16 +209,18 @@ function FlowCanvas() {
   const handleImport = useCallback(async () => {
     const state = await importJSON()
     if (state) {
+      takeSnapshot(nodes, edges)
       setNodes(state.nodes)
       setEdges(state.edges)
     }
-  }, [importJSON, setNodes, setEdges])
+  }, [importJSON, setNodes, setEdges, nodes, edges, takeSnapshot])
 
   const handleClear = useCallback(() => {
+    takeSnapshot(nodes, edges)
     setNodes([])
     setEdges([])
     localStorage.removeItem('funnel-builder-state')
-  }, [setNodes, setEdges])
+  }, [setNodes, setEdges, nodes, edges, takeSnapshot])
 
   const defaultEdgeOptions = useMemo(
     () => ({
@@ -177,6 +230,11 @@ function FlowCanvas() {
     []
   )
 
+  const minimapNodeColor = useCallback((node: Node) => {
+    const data = node.data as FunnelNodeData
+    return NODE_TEMPLATES[data.category]?.color ?? '#94a3b8'
+  }, [])
+
   return (
     <div className="flex h-screen">
       <Sidebar />
@@ -184,8 +242,8 @@ function FlowCanvas() {
         <ReactFlow
           nodes={nodes}
           edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
+          onNodesChange={handleNodesChange}
+          onEdgesChange={handleEdgesChange}
           onConnect={onConnect}
           onDrop={onDrop}
           onDragOver={onDragOver}
@@ -196,9 +254,18 @@ function FlowCanvas() {
           fitView
           proOptions={{ hideAttribution: true }}
           deleteKeyCode={['Backspace', 'Delete']}
+          snapToGrid
+          snapGrid={[20, 20]}
         >
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#d1d5db" />
-          <Controls />
+          <Controls showInteractive={false} />
+          <MiniMap
+            nodeColor={minimapNodeColor}
+            nodeStrokeWidth={3}
+            zoomable
+            pannable
+            className="!bg-gray-50 !border-gray-200"
+          />
         </ReactFlow>
         <Toolbar
           onExport={handleExport}
