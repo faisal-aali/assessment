@@ -18,8 +18,10 @@ import '@xyflow/react/dist/style.css'
 import Sidebar from './components/Sidebar'
 import FunnelNode from './components/FunnelNode'
 import CustomEdge from './components/CustomEdge'
+import Toolbar from './components/Toolbar'
 import ValidationPanel from './components/ValidationPanel'
 import { useFunnelValidation } from './hooks/useFunnelValidation'
+import { usePersistence } from './hooks/usePersistence'
 import { NODE_TEMPLATES, type NodeCategory, type FunnelNodeData } from './types/funnel'
 import { v4 as uuid } from 'uuid'
 
@@ -47,8 +49,28 @@ function FlowCanvas() {
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
 
   const { warnings, warningNodeIds } = useFunnelValidation(nodes, edges)
+  const { save, load, exportJSON, importJSON } = usePersistence()
 
-  // update node data with warning flags whenever validation changes
+  // load saved state on mount
+  useEffect(() => {
+    const saved = load()
+    if (saved) {
+      setNodes(saved.nodes)
+      setEdges(saved.edges)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // auto-save on changes (debounced slightly)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (nodes.length > 0 || edges.length > 0) {
+        save(nodes, edges)
+      }
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [nodes, edges, save])
+
+  // update node data with warning flags
   useEffect(() => {
     setNodes((nds) =>
       nds.map((node) => ({
@@ -129,6 +151,24 @@ function FlowCanvas() {
     [screenToFlowPosition, nodes, setNodes]
   )
 
+  const handleExport = useCallback(() => {
+    exportJSON(nodes, edges)
+  }, [nodes, edges, exportJSON])
+
+  const handleImport = useCallback(async () => {
+    const state = await importJSON()
+    if (state) {
+      setNodes(state.nodes)
+      setEdges(state.edges)
+    }
+  }, [importJSON, setNodes, setEdges])
+
+  const handleClear = useCallback(() => {
+    setNodes([])
+    setEdges([])
+    localStorage.removeItem('funnel-builder-state')
+  }, [setNodes, setEdges])
+
   const defaultEdgeOptions = useMemo(
     () => ({
       type: 'custom' as const,
@@ -160,6 +200,12 @@ function FlowCanvas() {
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#d1d5db" />
           <Controls />
         </ReactFlow>
+        <Toolbar
+          onExport={handleExport}
+          onImport={handleImport}
+          onClear={handleClear}
+          nodeCount={nodes.length}
+        />
         <ValidationPanel warnings={warnings} />
       </div>
     </div>
