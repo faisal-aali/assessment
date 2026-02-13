@@ -23,6 +23,7 @@ import FunnelNode from './components/FunnelNode'
 import CustomEdge from './components/CustomEdge'
 import Toolbar from './components/Toolbar'
 import ValidationPanel from './components/ValidationPanel'
+import EmptyCanvas from './components/EmptyCanvas'
 import { useFunnelValidation } from './hooks/useFunnelValidation'
 import { usePersistence } from './hooks/usePersistence'
 import { useUndoRedo } from './hooks/useUndoRedo'
@@ -230,6 +231,25 @@ function FlowCanvas() {
     []
   )
 
+  // allow adding nodes from keyboard (sidebar Enter key)
+  const handleAddFromSidebar = useCallback(
+    (category: NodeCategory) => {
+      takeSnapshot(nodes, edges)
+      const newNode: Node = {
+        id: uuid(),
+        type: 'funnel',
+        position: { x: 250 + Math.random() * 200, y: 150 + Math.random() * 200 },
+        data: {
+          label: generateLabel(category, nodes),
+          category,
+          buttonLabel: NODE_TEMPLATES[category].buttonLabel,
+        } satisfies FunnelNodeData,
+      }
+      setNodes((nds) => nds.concat(newNode))
+    },
+    [nodes, edges, setNodes, takeSnapshot]
+  )
+
   const minimapNodeColor = useCallback((node: Node) => {
     const data = node.data as FunnelNodeData
     return NODE_TEMPLATES[data.category]?.color ?? '#94a3b8'
@@ -237,7 +257,7 @@ function FlowCanvas() {
 
   return (
     <div className="flex h-screen">
-      <Sidebar />
+      <Sidebar onAddNode={handleAddFromSidebar} />
       <div className="flex-1 relative" ref={reactFlowWrapper}>
         <ReactFlow
           nodes={nodes}
@@ -267,6 +287,7 @@ function FlowCanvas() {
             className="!bg-gray-50 !border-gray-200"
           />
         </ReactFlow>
+        {nodes.length === 0 && <EmptyCanvas />}
         <Toolbar
           onExport={handleExport}
           onImport={handleImport}
