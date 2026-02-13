@@ -7,6 +7,7 @@ import {
   Controls,
   Background,
   BackgroundVariant,
+  MarkerType,
   type Connection,
   type Node,
   ReactFlowProvider,
@@ -16,10 +17,12 @@ import '@xyflow/react/dist/style.css'
 
 import Sidebar from './components/Sidebar'
 import FunnelNode from './components/FunnelNode'
+import CustomEdge from './components/CustomEdge'
 import { NODE_TEMPLATES, type NodeCategory, type FunnelNodeData } from './types/funnel'
 import { v4 as uuid } from 'uuid'
 
 const nodeTypes = { funnel: FunnelNode }
+const edgeTypes = { custom: CustomEdge }
 
 function generateLabel(category: NodeCategory, existingNodes: Node[]) {
   const base = NODE_TEMPLATES[category].label
@@ -29,7 +32,6 @@ function generateLabel(category: NodeCategory, existingNodes: Node[]) {
     ).length
     return count === 0 ? base : `${base} ${count + 1}`
   }
-  // upsell / downsell always get a number
   const count = existingNodes.filter(
     (n) => (n.data as FunnelNodeData).category === category
   ).length
@@ -44,9 +46,43 @@ function FlowCanvas() {
 
   const onConnect = useCallback(
     (params: Connection) => {
-      setEdges((eds) => addEdge({ ...params, animated: true }, eds))
+      // don't allow duplicate connections
+      const exists = edges.some(
+        (e) => e.source === params.source && e.target === params.target
+      )
+      if (exists) return
+
+      setEdges((eds) =>
+        addEdge(
+          {
+            ...params,
+            type: 'custom',
+            markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8' },
+          },
+          eds
+        )
+      )
     },
-    [setEdges]
+    [setEdges, edges]
+  )
+
+  const isValidConnection = useCallback(
+    (connection: Connection) => {
+      // can't connect to self
+      if (connection.source === connection.target) return false
+
+      // find source node
+      const sourceNode = nodes.find((n) => n.id === connection.source)
+      if (!sourceNode) return false
+
+      const sourceData = sourceNode.data as FunnelNodeData
+
+      // thank you pages can't have outgoing edges
+      if (sourceData.category === 'thankyou') return false
+
+      return true
+    },
+    [nodes]
   )
 
   const onDragOver = useCallback((e: React.DragEvent) => {
@@ -83,9 +119,8 @@ function FlowCanvas() {
 
   const defaultEdgeOptions = useMemo(
     () => ({
-      type: 'smoothstep' as const,
-      animated: true,
-      style: { stroke: '#94a3b8', strokeWidth: 2 },
+      type: 'custom' as const,
+      markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8' },
     }),
     []
   )
@@ -103,9 +138,12 @@ function FlowCanvas() {
           onDrop={onDrop}
           onDragOver={onDragOver}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           defaultEdgeOptions={defaultEdgeOptions}
+          isValidConnection={isValidConnection}
           fitView
           proOptions={{ hideAttribution: true }}
+          deleteKeyCode={['Backspace', 'Delete']}
         >
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#d1d5db" />
           <Controls />
