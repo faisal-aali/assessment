@@ -1,16 +1,18 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { NODE_TEMPLATES, type FunnelNodeData } from '../types/funnel'
+import { useWarningStatus } from '../context/ValidationContext'
 
-type Props = NodeProps & { data: FunnelNodeData & { hasWarning?: boolean } }
+type Props = NodeProps & { data: FunnelNodeData }
 
-export default function FunnelNode({ data }: Props) {
+export default function FunnelNode({ id, data }: Props) {
   const template = NODE_TEMPLATES[data.category]
   const isThankYou = data.category === 'thankyou'
+  const hasWarning = useWarningStatus(id)
 
   return (
     <div
       className={`bg-white rounded-xl shadow-md border-2 w-48 overflow-hidden transition-shadow ${
-        data.hasWarning ? 'ring-2 ring-amber-400 ring-offset-1' : ''
+        hasWarning ? 'ring-2 ring-amber-400 ring-offset-1' : ''
       }`}
       style={{ borderColor: template.color }}
     >
@@ -24,10 +26,10 @@ export default function FunnelNode({ data }: Props) {
         className="px-3 py-2 flex items-center gap-2"
         style={{ backgroundColor: template.color + '12' }}
       >
-        <span className="text-base">{template.icon}</span>
+        <span className="text-base" aria-hidden="true">{template.icon}</span>
         <span className="text-sm font-semibold text-gray-800 truncate flex-1">{data.label}</span>
-        {data.hasWarning && (
-          <span className="text-amber-500 text-sm" title="This node has a warning">⚠️</span>
+        {hasWarning && (
+          <span className="text-amber-500 text-sm" title="This node has a warning" aria-label="Warning">⚠️</span>
         )}
       </div>
 

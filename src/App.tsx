@@ -24,6 +24,7 @@ import CustomEdge from './components/CustomEdge'
 import Toolbar from './components/Toolbar'
 import ValidationPanel from './components/ValidationPanel'
 import EmptyCanvas from './components/EmptyCanvas'
+import { ValidationProvider } from './context/ValidationContext'
 import { useFunnelValidation } from './hooks/useFunnelValidation'
 import { usePersistence } from './hooks/usePersistence'
 import { useUndoRedo } from './hooks/useUndoRedo'
@@ -75,19 +76,6 @@ function FlowCanvas() {
     }, 500)
     return () => clearTimeout(timer)
   }, [nodes, edges, save])
-
-  // update warning flags on nodes
-  useEffect(() => {
-    setNodes((nds) =>
-      nds.map((node) => ({
-        ...node,
-        data: {
-          ...node.data,
-          hasWarning: warningNodeIds.has(node.id),
-        },
-      }))
-    )
-  }, [warningNodeIds, setNodes])
 
   // keyboard shortcuts for undo/redo
   useEffect(() => {
@@ -231,7 +219,6 @@ function FlowCanvas() {
     []
   )
 
-  // allow adding nodes from keyboard (sidebar Enter key)
   const handleAddFromSidebar = useCallback(
     (category: NodeCategory) => {
       takeSnapshot(nodes, edges)
@@ -256,47 +243,49 @@ function FlowCanvas() {
   }, [])
 
   return (
-    <div className="flex h-screen">
-      <Sidebar onAddNode={handleAddFromSidebar} />
-      <div className="flex-1 relative" ref={reactFlowWrapper}>
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={handleNodesChange}
-          onEdgesChange={handleEdgesChange}
-          onConnect={onConnect}
-          onDrop={onDrop}
-          onDragOver={onDragOver}
-          nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
-          defaultEdgeOptions={defaultEdgeOptions}
-          isValidConnection={isValidConnection}
-          fitView
-          proOptions={{ hideAttribution: true }}
-          deleteKeyCode={['Backspace', 'Delete']}
-          snapToGrid
-          snapGrid={[20, 20]}
-        >
-          <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#d1d5db" />
-          <Controls showInteractive={false} />
-          <MiniMap
-            nodeColor={minimapNodeColor}
-            nodeStrokeWidth={3}
-            zoomable
-            pannable
-            className="!bg-gray-50 !border-gray-200"
+    <ValidationProvider value={warningNodeIds}>
+      <div className="flex h-screen">
+        <Sidebar onAddNode={handleAddFromSidebar} />
+        <div className="flex-1 relative" ref={reactFlowWrapper}>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={handleNodesChange}
+            onEdgesChange={handleEdgesChange}
+            onConnect={onConnect}
+            onDrop={onDrop}
+            onDragOver={onDragOver}
+            nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            defaultEdgeOptions={defaultEdgeOptions}
+            isValidConnection={isValidConnection}
+            fitView
+            proOptions={{ hideAttribution: true }}
+            deleteKeyCode={['Backspace', 'Delete']}
+            snapToGrid
+            snapGrid={[20, 20]}
+          >
+            <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#d1d5db" />
+            <Controls showInteractive={false} />
+            <MiniMap
+              nodeColor={minimapNodeColor}
+              nodeStrokeWidth={3}
+              zoomable
+              pannable
+              className="!bg-gray-50 !border-gray-200"
+            />
+          </ReactFlow>
+          {nodes.length === 0 && <EmptyCanvas />}
+          <Toolbar
+            onExport={handleExport}
+            onImport={handleImport}
+            onClear={handleClear}
+            nodeCount={nodes.length}
           />
-        </ReactFlow>
-        {nodes.length === 0 && <EmptyCanvas />}
-        <Toolbar
-          onExport={handleExport}
-          onImport={handleImport}
-          onClear={handleClear}
-          nodeCount={nodes.length}
-        />
-        <ValidationPanel warnings={warnings} />
+          <ValidationPanel warnings={warnings} />
+        </div>
       </div>
-    </div>
+    </ValidationProvider>
   )
 }
 
