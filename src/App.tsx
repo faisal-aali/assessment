@@ -1,4 +1,4 @@
-import { useCallback, useRef, useMemo } from 'react'
+import { useCallback, useRef, useMemo, useEffect } from 'react'
 import {
   ReactFlow,
   addEdge,
@@ -18,6 +18,8 @@ import '@xyflow/react/dist/style.css'
 import Sidebar from './components/Sidebar'
 import FunnelNode from './components/FunnelNode'
 import CustomEdge from './components/CustomEdge'
+import ValidationPanel from './components/ValidationPanel'
+import { useFunnelValidation } from './hooks/useFunnelValidation'
 import { NODE_TEMPLATES, type NodeCategory, type FunnelNodeData } from './types/funnel'
 import { v4 as uuid } from 'uuid'
 
@@ -44,9 +46,23 @@ function FlowCanvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
 
+  const { warnings, warningNodeIds } = useFunnelValidation(nodes, edges)
+
+  // update node data with warning flags whenever validation changes
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((node) => ({
+        ...node,
+        data: {
+          ...node.data,
+          hasWarning: warningNodeIds.has(node.id),
+        },
+      }))
+    )
+  }, [warningNodeIds, setNodes])
+
   const onConnect = useCallback(
     (params: Connection) => {
-      // don't allow duplicate connections
       const exists = edges.some(
         (e) => e.source === params.source && e.target === params.target
       )
@@ -68,16 +84,12 @@ function FlowCanvas() {
 
   const isValidConnection = useCallback(
     (connection: Connection) => {
-      // can't connect to self
       if (connection.source === connection.target) return false
 
-      // find source node
       const sourceNode = nodes.find((n) => n.id === connection.source)
       if (!sourceNode) return false
 
       const sourceData = sourceNode.data as FunnelNodeData
-
-      // thank you pages can't have outgoing edges
       if (sourceData.category === 'thankyou') return false
 
       return true
@@ -128,7 +140,7 @@ function FlowCanvas() {
   return (
     <div className="flex h-screen">
       <Sidebar />
-      <div className="flex-1" ref={reactFlowWrapper}>
+      <div className="flex-1 relative" ref={reactFlowWrapper}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -148,6 +160,7 @@ function FlowCanvas() {
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#d1d5db" />
           <Controls />
         </ReactFlow>
+        <ValidationPanel warnings={warnings} />
       </div>
     </div>
   )
